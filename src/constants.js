@@ -1,1 +1,1 @@
- index.js
+export const dbName='videotube';
