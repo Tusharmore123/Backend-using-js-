@@ -228,58 +228,193 @@ const updateUserDetails = async(async (req, res) => {
     res.send(200).json({
         fullName,
         email,
-        message:"updated successfully"
+        message: "updated successfully"
     })
 })
 
-const updateUserAvatar=async(async(req,res)=>{
-    const avatarFilePath=req.file?.path
-    if (!avatarFilePath){
-        throw new ApiError("Avatar file path is missing",401)
+const updateUserAvatar = async(async (req, res) => {
+    const avatarFilePath = req.file?.path
+    if (!avatarFilePath) {
+        throw new ApiError("Avatar file path is missing", 401)
 
     }
-    const avatar=uploadOnCloudinary(avatarFilePath)
-    if(!avatar){
-        throw new ApiError("fail to upload file on cloudinary",401)
+    const avatar = uploadOnCloudinary(avatarFilePath)
+    if (!avatar) {
+        throw new ApiError("fail to upload file on cloudinary", 401)
     }
-    const user=User.findByIdAndUpdate(
+    const user = User.findByIdAndUpdate(
         req.user?._id,
         {
-            $set:{
-                avatar:avatar.url
+            $set: {
+                avatar: avatar.url
             }
-        },{
-            new:true
-        }).select("-password")
-    return res.send(200).json({'data':user
-    ,message:'updated avatar Successfully'})
+        }, {
+        new: true
+    }).select("-password")
+    return res.send(200).json({
+        'data': user
+        , message: 'updated avatar Successfully'
+    })
 })
-const updateCoverImage=async(async(req,res)=>{
-    const coverImageFilePath=req.file?.path
-    if (!coverImageFilePath){
-        throw new ApiError("Cover Image file path is missing",401)
+const updateCoverImage = async(async (req, res) => {
+    const coverImageFilePath = req.file?.path
+    if (!coverImageFilePath) {
+        throw new ApiError("Cover Image file path is missing", 401)
 
     }
-    const coverImage=uploadOnCloudinary(coverImageFilePath)
-    if(!coverImage){
-        throw new ApiError("fail to upload coverImage file on cloudinary",401)
+    const coverImage = uploadOnCloudinary(coverImageFilePath)
+    if (!coverImage) {
+        throw new ApiError("fail to upload coverImage file on cloudinary", 401)
     }
-    const user=User.findByIdAndUpdate(
+    const user = User.findByIdAndUpdate(
         req.user?._id,
         {
-            $set:{
-                coverImage:coverImage.url
+            $set: {
+                coverImage: coverImage.url
             }
-        },{
-            new:true
-        }).select("-password")
-    return res.send(200).json({'data':user
-    ,message:'updated coverImage Successfully'})
+        }, {
+        new: true
+    }).select("-password")
+    return res.send(200).json({
+        'data': user
+        , message: 'updated coverImage Successfully'
+    })
 })
-export { registerUser, 
-    loginUser, 
-    logoutUser ,
+
+
+
+const getChannelSubscriber = asynchandler(async (req, res) => {
+    const { name } = req.params
+    if (!name) {
+        throw new ApiError("Invalid username", 400)
+    }
+
+    const channel = User.aggregate([{
+        $match: {
+            name: name
+        }
+    },
+    {
+        $lookup: {
+            from: "subscribers",
+            localField: "_id",
+            foreignField: 'channel',
+            as: 'subscribers'
+        }
+    },
+    {
+        $lookup: {
+            from: "subscribers",
+            localField: "_id",
+            foreignField: 'subscriber',
+            as: 'subscribedTo'
+        }
+    },
+    {
+        $addFields: {
+            subscribersCount: {
+                $size: '$subscribers'
+            },
+            subscribedCount: {
+                $size: '$subscribedTo'
+            },
+            isSubscribed: {
+                $condition: {
+                    if: { $in: [req.user?._id, '$subscribers.subscriber'] },
+                    then: true,
+                    else: false
+
+                }
+            }
+        }
+    },{
+    $project:{
+        name:1,
+        email:1,
+        fullName:1,
+        subscribersCount:1,
+        subscribedCount:1,
+        avatar:1,
+        coverImage:1
+
+    }
+}
+    ])
+    if (!channel?.length){
+        throw new ApiError("Invalid channnel",400)
+    }
+
+    return res.send(200).json(
+        new ApiResponseHandler(channel,200)
+    )
+
+})
+
+const getCurrentUser=asynchandler(async(req,res)=>{
+    return req.user
+})
+
+
+
+const getUserWatchHistory=asynchandler(async (req,res)=>{
+    const user=User.aggregate({
+        $match:{
+            _id:mongoose.Types.ObjectId(req.user?._id)
+        }
+    },
+    {
+        $lookup:{
+            from :"videos",
+            localField:'watchHistory',
+            foreignField:'_id',
+            as:'watchHistory',
+            pipeline:[
+                {
+                    $lookup:{
+                        from:'users',
+                        localField:'owner',
+                        foreignField:'_id',
+                        as :'owner',
+                        pipeline:[{
+                            $project:{
+                                name:1,
+                                email:1,
+                                avatar:1,
+                                fullName
+                            }
+                        }]
+                    },
+                    $addFields:{
+                        owner:{
+                            first:'$owner'
+                        }
+                    }
+                }
+            ]
+        }
+    }
+)
+    if(!user?.wathcHistory){
+        throw new ApiError('Invalid user',400)
+    }
+    return res.send(200).json(
+        new ApiResponseHandler(user[0].wathcHistory,200)
+    )
+})
+
+
+
+
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser,
+    getCurrentUser,
     updateCoverImage,
     updateUserAvatar,
     updateUserDetails,
-    changeCurrentUserPassword}
+    changeCurrentUserPassword,
+    getChannelSubscriber,
+    getUserWatchHistory
+}
